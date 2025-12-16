@@ -1,5 +1,6 @@
 # Environment variables
 .env
+uv.lock
 
 # Python
 __pycache__/
@@ -11,8 +12,10 @@ venv/
 env/
 ENV/
 .venv
+.python-version
 
 # IDE
+.claude/
 .vscode/
 .idea/
 *.swp
