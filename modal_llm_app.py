@@ -1,21 +1,21 @@
 """
-Modal deployment for Llama 3.1 8B model serving.
-This creates an API endpoint that serves the Llama model.
+Modal deployment for Qwen2.5-3B model serving.
+This creates an API endpoint that serves the Qwen model for Spanish testing.
 """
 
 import modal
 
 # Create Modal app for LLM
-app = modal.App("llama-8b-spanish")
+app = modal.App("whatsup-llm")
 
 # Define image with vLLM for fast inference
 llm_image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "vllm==0.6.3",
 )
 
-# Model configuration
-MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-GPU_CONFIG = "A10G"  # A10G is cost-effective for 8B models
+# Model configuration - Using Qwen2.5-3B for testing (open model, good Spanish support)
+MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
+GPU_CONFIG = "A10G"  # A10G works well for 3B models
 
 
 @app.cls(
@@ -23,10 +23,11 @@ GPU_CONFIG = "A10G"  # A10G is cost-effective for 8B models
     gpu=GPU_CONFIG,
     timeout=60 * 10,  # 10 minutes
     scaledown_window=60 * 5,  # 5 minutes idle before shutdown
+    retries=0,  # Stop on error, don't retry forever
 )
 @modal.concurrent(max_inputs=10)
 class LlamaModel:
-    """Llama 3.1 8B model served with vLLM."""
+    """Qwen2.5-3B model served with vLLM - open model with good Spanish support."""
 
     @modal.enter()
     def load_model(self):
@@ -45,7 +46,7 @@ class LlamaModel:
         """Generate response from messages."""
         from vllm import SamplingParams
 
-        # Format messages into prompt (Llama 3.1 chat format)
+        # Format messages into prompt (Qwen2.5 chat format)
         prompt = self._format_chat_prompt(messages)
 
         sampling_params = SamplingParams(
@@ -58,23 +59,13 @@ class LlamaModel:
         return result[0].outputs[0].text
 
     def _format_chat_prompt(self, messages: list[dict]) -> str:
-        """Format messages into Llama 3.1 chat prompt format."""
-        prompt = ""
-
-        for message in messages:
-            role = message["role"]
-            content = message["content"]
-
-            if role == "system":
-                prompt += f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{content}<|eot_id|>"
-            elif role == "user":
-                prompt += f"<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>"
-            elif role == "assistant":
-                prompt += f"<|start_header_id|>assistant<|end_header_id|>\n\n{content}<|eot_id|>"
-
-        # Add assistant header to prompt for response
-        prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n"
-
+        """Format messages into Qwen2.5 chat prompt format."""
+        # Use Qwen2.5 chat template (tokenizer is already loaded)
+        prompt = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
         return prompt
 
 

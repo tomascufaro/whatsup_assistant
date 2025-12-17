@@ -14,16 +14,16 @@ modal token new
 
 This will open a browser for authentication.
 
-## Step 3: Deploy the Llama Model
+## Step 3: Deploy the LLM Model
 
 ```bash
-modal deploy modal_llm.py
+modal deploy modal_llm_app.py
 ```
 
 This will:
-- Deploy Llama 3.1 8B on Modal with vLLM
+- Deploy the LLM model on Modal with vLLM
 - Create an HTTP endpoint
-- Give you a URL like: `https://your-workspace--llama-8b-spanish-generate-endpoint.modal.run`
+- Give you a URL like: `https://your-workspace--whatsup-llm-generate-endpoint.modal.run`
 
 **Copy this URL** - you'll need it for the next step.
 
@@ -75,7 +75,7 @@ modal app list
 
 ### View logs (LLM)
 ```bash
-modal app logs llama-8b-spanish
+modal app logs whatsup-llm
 ```
 
 ### View logs (FastAPI)
@@ -85,7 +85,7 @@ modal app logs whatsapp-assistant
 
 ### Stop deployments
 ```bash
-modal app stop llama-8b-spanish
+modal app stop whatsup-llm
 modal app stop whatsapp-assistant
 ```
 

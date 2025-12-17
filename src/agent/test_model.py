@@ -8,7 +8,7 @@ Note: First request may take 1-2 minutes (cold start - loading model into GPU).
 import requests
 
 # Your deployed endpoint URL
-ENDPOINT_URL = "https://tomascufaro--llama-8b-spanish-generate-endpoint.modal.run"
+ENDPOINT_URL = "https://tomascufaro--whatsup-llm-generate-endpoint.modal.run"
 
 
 def test_model():

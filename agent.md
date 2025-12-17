@@ -33,6 +33,14 @@ This document outlines the best practices and rules that all agents should follo
 - Avoid redundant comments that simply restate what the code does
 - Keep documentation concise and meaningful
 
+### 5. File Management
+**Avoid creating unnecessary files. Prefer refactoring existing files.**
+- Do not create new files when functionality can be added to existing ones
+- When testing or experimenting, reuse existing test files instead of creating new ones
+- Only create new files when there is a clear separation of concerns or module boundary
+- Keep the file structure clean and minimal
+- If refactoring, apply changes to the same file for clarity
+
 ## Implementation Guidelines
 
 ### Before Making Changes
