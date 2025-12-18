@@ -4,6 +4,8 @@ This creates an API endpoint that serves the Qwen model for Spanish testing.
 """
 
 import modal
+from pydantic import BaseModel
+from typing import List, Dict, Optional
 
 # Create Modal app for LLM
 app = modal.App("whatsup-llm")
@@ -11,6 +13,7 @@ app = modal.App("whatsup-llm")
 # Define image with vLLM for fast inference
 llm_image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "vllm==0.6.3",
+    "pydantic>=2.5.0",
 )
 
 # Model configuration - Using Qwen2.5-3B for testing (open model, good Spanish support)
@@ -69,19 +72,26 @@ class LlamaModel:
         return prompt
 
 
+class GenerateRequest(BaseModel):
+    """Request model for generation endpoint."""
+    messages: List[Dict[str, str]]
+    max_tokens: Optional[int] = 500
+    temperature: Optional[float] = 0.7
+
+
 @app.function(image=llm_image)
 @modal.fastapi_endpoint(method="POST")
-def generate_endpoint(request: dict) -> dict:
+def generate_endpoint(request: GenerateRequest) -> dict:
     """
     HTTP endpoint for generating responses.
     Compatible with OpenAI-style API format.
     """
-    messages = request.get("messages", [])
-    max_tokens = request.get("max_tokens", 500)
-    temperature = request.get("temperature", 0.7)
-
     model = LlamaModel()
-    response_text = model.generate.remote(messages, max_tokens, temperature)
+    response_text = model.generate.remote(
+        request.messages, 
+        request.max_tokens, 
+        request.temperature
+    )
 
     # Return OpenAI-compatible format
     return {
