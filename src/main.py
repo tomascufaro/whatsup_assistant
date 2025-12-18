@@ -35,8 +35,11 @@ async def whatsapp_webhook(request: Request):
             print("Warning: Empty message body")
             return Response(content="", media_type="text/xml", status_code=200)
 
+        # Use from_number as chat_id for memory
+        chat_id = from_number if from_number else None
+
         # Get AI response from Modal
-        response_text = await agent.process_message({"body": body})
+        response_text = await agent.process_message({"body": body}, chat_id=chat_id)
         print(f"Response text from agent: {response_text}")
 
         # Build TwiML response

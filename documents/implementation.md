@@ -1,72 +1,59 @@
-# Implementation Plan: Twilio → Modal Llama Loop (Clean Rebuild)
+# Implementation Plan: Native Tool Calling
 
-## Goal
-Route Twilio WhatsApp webhooks directly to the Modal-hosted Llama endpoint and return the model’s reply, keeping everything minimal and testable step by step.
+Goal: enable the WhatsApp agent to trigger tools natively via model tool-calling (store client info, send email) by updating the Modal/vLLM endpoint and client.
 
-## Scope
-- Twilio-only (drop Meta for now).
-- One path: webhook receives message → call Modal → reply.
-- Start with TwiML responses (no outbound REST send), then add outbound send if needed.
+Scope (MVP)
+- 1:1 chats only.
+- Tools: `store_client`, `send_email` (can be used for meeting notifications).
+- Model must support tool calling; update Modal app/client to pass tool schemas and handle tool_call responses.
 
-## Environment Variables (required unless noted)
-- `MODAL_ENDPOINT_URL` - Your deployed LLM endpoint: `https://tomascufaro--whatsup-llm-generate-endpoint.modal.run`
-- `TWILIO_ACCOUNT_SID` (not needed for local testing, required for deployment)
-- `TWILIO_AUTH_TOKEN` (not needed for local testing, required for deployment)
-- `TWILIO_PHONE_NUMBER` (not needed for local testing, required for deployment)
+Architecture / Modules
+- `modal_llm_app.py` (or similar server): expose tool-calling endpoint (pass tool schemas to vLLM, return model responses including tool_calls).
+- `src/agent/prompts.py`: refine system prompt (light touch; tools handled via schemas).
+- `src/agent/tools.py` (new): tool definitions (schemas) and implementations.
+  - Definitions: JSON schema for each tool (name, description, params).
+  - Implementations: `store_client(data)`, `send_email(data)`.
+- `src/agent/core.py`: client side orchestration.
+  - Send messages + tool schemas to Modal endpoint.
+  - Handle responses: text or tool_calls; execute tool; feed tool result back to model if needed; produce user-facing reply.
+- `src/agent/memory.py`: unchanged (context assembly).
 
-## Implementation Steps
-1) **Webhook parsing (Twilio form data)**
-   - In `src/main.py`, read `await request.form()` (not JSON).
-   - Extract `Body`, `From`, `To`, `MessageSid`.
-   - Minimal validation; log/return 200 even on parse failures.
+Tool definitions (schemas)
+- `store_client` params: name (string, required), email (string, required), phone (string, optional), notes (string, optional).
+- `send_email` params: to (string, required), subject (string, required), body (string, required). Allow default `to` (your email) if missing, optional.
 
-2) **Model call**
-   - `Agent.process_message` uses HTTP POST to Modal endpoint (already implemented in `src/agent/core.py`).
-   - Spanish system prompt already configured in `src/agent/prompts.py`.
-   - No changes needed for MVP.
+Server changes (Modal / vLLM)
+- Ensure the model supports tool calling (e.g., Qwen/LLM with function calling enabled in vLLM).
+- Update endpoint handler to accept `tools` in the request body and pass through to vLLM; return raw model response including `tool_calls` and subsequent model text.
+- If using streaming, handle tool messages; for simplicity, start non-streaming.
 
-3) **Respond via TwiML (simplest loop)**
-   - Build `MessagingResponse` with the model text and return as the webhook HTTP response.
-   - This avoids a second Twilio REST call while you test the round-trip.
+Client flow (`core.py`)
+1) Build messages: system + memory + user.
+2) Call Modal endpoint with messages + tool schemas.
+3) If response is plain text: return to user.
+4) If response includes `tool_calls`:
+   - For each call (MVP: assume one): parse tool name/arguments.
+   - Execute local implementation.
+   - Append tool result as a tool message and re-query the model to get the final user-facing reply (or return a fixed confirmation to simplify).
+5) Send final reply to user; log tool usage.
 
-4) **Optional outbound send**
-   - Keep `WhatsAppService.send_message` for proactive sends.
-   - Gate usage behind a flag so core flow relies only on TwiML during testing.
+Tools implementation (`tools.py`)
+- `store_client(data)`: append to `data/clients.csv` (create if missing, headers name,email,phone,notes,created_at). Minimal validation (require name/email).
+- `send_email(data)`: thin wrapper around existing email helper/SMTP. Validate `to` (or use default), subject/body non-empty.
+- Both return short strings summarizing the result for the model.
 
-5) **Logging/observability**
-   - Add concise logs for: parse failures, Modal call exceptions, empty responses.
-   - Avoid noisy prints; prefer structured `print`/logging for now.
+Config
+- CSV path: `data/clients.csv` (env override optional).
+- Email config: reuse existing envs (`EMAIL_FROM`, `EMAIL_TO_DEFAULT`, SMTP creds). Default `to` to your address if missing.
+- Flag: `ENABLE_TOOL_CALLING` (default on once ready).
 
-6) **Testing**
-   - Local: `uvicorn src.main:app --reload`.
-   - Health: `curl http://localhost:8000/health`.
-   - Webhook sim: `curl -X POST http://localhost:8000/webhook/whatsapp -d "From=whatsapp:+123&Body=Hola"`.
-   - Verify the TwiML response contains the model text.
+Testing
+- Unit: tool schemas present; tool implementations validate inputs; CSV append; email stub called.
+- Integration: mock Modal response with tool_call -> execute tool -> second call returns final text; plain text path unchanged.
 
-7) **Deploy & hook up**
-   - Deploy FastAPI to Modal: `uv run modal deploy modal_app.py`
-   - Get the deployed URL from Modal output
-   - Point Twilio WhatsApp sandbox webhook to: `https://your-url/webhook/whatsapp`
-   - Send a real WhatsApp message and confirm the round-trip.
-
-## File Touchpoints
-- `src/main.py`: switch to form parsing, TwiML response, minimal logging.
-- `src/services/whatsapp.py`: simplify to Twilio-only, remove unused Meta code.
-- `src/agent/core.py`: ✅ already uses HTTP to call Modal endpoint - no changes needed.
-- `src/agent/prompts.py`: ✅ already configured for Spanish - no changes needed.
-- `modal_app.py`: deployment config for FastAPI (already exists).
-- `modal_llm_app.py`: ✅ Llama endpoint already deployed.
-
-## Current Status
-✅ Modal LLM deployed at: `https://tomascufaro--whatsup-llm-generate-endpoint.modal.run` (update after redeploy)
-✅ Agent configured to call Modal endpoint with Spanish prompts
-✅ UV project setup complete with all dependencies
-
-## Next Moves (suggested order)
-1) Update `src/main.py` webhook to use form data and return TwiML with the model reply.
-2) Simplify `src/services/whatsapp.py` to Twilio-only (remove Meta code).
-3) Create `.env` file with `MODAL_ENDPOINT_URL` for local testing.
-4) Local curl test: `curl -X POST http://localhost:8000/webhook/whatsapp -d "From=whatsapp:+123&Body=Hola"`
-5) Deploy to Modal: `uv run modal deploy modal_app.py`
-6) Configure Twilio sandbox webhook to point to deployed URL.
-7) Test with real WhatsApp message.
+Rollout steps
+- Update `modal_llm_app.py` to accept/forward tools and return tool_calls.
+- Add `src/agent/tools.py` with schemas+impls.
+- Update `core.py` client to send tools and handle tool_call responses (two-pass flow for tool result).
+- Adjust system prompt if needed (minimal).
+- Smoke test locally with mocked tool_call responses before hitting Modal.
