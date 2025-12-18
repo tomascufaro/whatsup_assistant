@@ -5,8 +5,11 @@ Database tool for reading/writing to CSV file.
 import os
 import pandas as pd
 from typing import Optional
+import logging
+import time
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
+from logging_setup import get_request_id
 
 
 CSV_PATH = os.path.join(os.path.dirname(__file__), '../../data/clients.csv')
@@ -14,19 +17,19 @@ CSV_PATH = os.path.join(os.path.dirname(__file__), '../../data/clients.csv')
 
 class DatabaseInput(BaseModel):
     """Input schema for database operations."""
-    action: str = Field(description="Action: 'get', 'add', 'update', or 'list'")
-    name: Optional[str] = Field(default=None, description="Client name")
-    email: Optional[str] = Field(default=None, description="Client email")
-    phone: Optional[str] = Field(default=None, description="Client phone")
-    notes: Optional[str] = Field(default=None, description="Client notes")
+    action: str = Field(description="Acción: 'get', 'add', 'update', o 'list'")
+    name: Optional[str] = Field(default=None, description="Nombre del cliente")
+    email: Optional[str] = Field(default=None, description="Email del cliente")
+    phone: Optional[str] = Field(default=None, description="Teléfono del cliente")
+    notes: Optional[str] = Field(default=None, description="Notas del cliente")
 
 
 class DatabaseTool(BaseTool):
     """Tool for managing client database (CSV file)."""
     
-    name = "client_database"
-    description = "Manage client information in the database. Can get, add, update, or list clients."
-    args_schema = DatabaseInput
+    name: str = "client_database"
+    description: str = "Gestiona información de clientes en la base de datos. Puede obtener (get), agregar (add), actualizar (update) o listar (list) clientes."
+    args_schema: type[BaseModel] = DatabaseInput
     
     def _ensure_csv_exists(self):
         """Ensure the CSV file exists with proper headers."""
@@ -39,6 +42,9 @@ class DatabaseTool(BaseTool):
              email: Optional[str] = None, phone: Optional[str] = None,
              notes: Optional[str] = None) -> str:
         """Execute database operation."""
+        log = logging.getLogger("tool")
+        start = time.time()
+        request_id = get_request_id()
         try:
             self._ensure_csv_exists()
             df = pd.read_csv(CSV_PATH)
@@ -90,7 +96,21 @@ class DatabaseTool(BaseTool):
             
             else:
                 return f"Unknown action: {action}"
-        
         except Exception as e:
+            log.error("tool_error", extra={
+                "stage": "tool_error",
+                "tool": self.name,
+                "request_id": request_id,
+                "action": action,
+                "duration_ms": int((time.time() - start) * 1000),
+                "error": str(e),
+            })
             return f"Error: {str(e)}"
-
+        finally:
+            log.info("tool_call", extra={
+                "stage": "tool_call",
+                "tool": self.name,
+                "request_id": request_id,
+                "action": action,
+                "duration_ms": int((time.time() - start) * 1000),
+            })

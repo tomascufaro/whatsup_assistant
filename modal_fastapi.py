@@ -7,6 +7,9 @@ from pathlib import Path
 
 app = modal.App("whatsapp-assistant")
 
+# Create persistent volume for memory storage
+volume = modal.Volume.from_name("memory-storage", create_if_missing=True)
+
 # Define image with dependencies and local src directory
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -17,6 +20,12 @@ image = (
         "twilio>=8.10.0",
         "httpx>=0.25.0",
         "python-multipart>=0.0.6",
+        "langchain>=0.1.0",
+        "langchain-openai>=0.1.0",
+        "langchainhub>=0.1.14",
+        "langgraph>=0.1.0",
+        "pandas>=2.1.3",
+        "pydantic>=2.5.0",
     )
     .add_local_dir(
         Path(__file__).parent / "src",
@@ -27,6 +36,7 @@ image = (
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("whatsapp-secrets")],
+    volumes={"/data/memory": volume},
     timeout=180,  # 3 minute timeout (enough for cold start + LLM response)
 )
 @modal.asgi_app()
