@@ -18,7 +18,7 @@ from logging_setup import set_request_id
 
 
 class Agent:
-    """Main agent that processes messages using ReAct agent with Modal's Qwen model."""
+    """Main agent that processes messages using ReAct agent backed by vLLM (OpenAI-compatible)."""
 
     def __init__(self, max_turns: int = 20):
         """
@@ -27,28 +27,24 @@ class Agent:
         Args:
             max_turns: Maximum number of conversation turns to keep in memory (default: 20)
         """
-        self.modal_endpoint = os.getenv("MODAL_ENDPOINT_URL")
+        self.vllm_url = os.getenv("VLLM_SERVER_URL") or "https://tomascufaro--vllm-serve-serve.modal.run/v1"
         self.modal_token = os.getenv("MODAL_TOKEN")
         self.memory_manager = MemoryManager(max_turns=max_turns)
         self.system_prompt = get_system_prompt()
 
-        if not self.modal_endpoint:
-            raise ValueError("MODAL_ENDPOINT_URL environment variable not set")
-
-        # Initialize LLM (ChatOpenAI points to Modal endpoint)
-        # Remove /generate_endpoint from URL if present
-        base_url = self.modal_endpoint.rsplit('/', 1)[0] if '/' in self.modal_endpoint else self.modal_endpoint
-        
+        # Initialize LLM (ChatOpenAI points to vLLM OpenAI-compatible server)
+        model_name = os.getenv("VLLM_MODEL_NAME") or "Qwen/Qwen3-8B-FP8"
         self.llm = ChatOpenAI(
-            base_url=base_url,
+            base_url=self.vllm_url,  # should include /v1
             api_key=self.modal_token or "dummy",
-            model="qwen",
+            model=model_name,  # served model name from vLLM
             temperature=0.7,
             max_tokens=500,
+            model_kwargs={"tool_choice": "none"},  # disable tool-calling to avoid server 400s
         )
 
-        # Load tools
-        self.tools = [DatabaseTool(), EmailTool()]
+        # Load tools (disabled for now; we send plain chat completions)
+        self.tools = []
 
         # Create ReAct agent with LangGraph
         # Note: LangGraph's create_react_agent uses default ReAct prompt

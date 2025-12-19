@@ -1,7 +1,7 @@
 fastapi==0.104.1
 uvicorn==0.24.0
 python-dotenv==1.0.0
-modal==0.63.0
+modal==1.2.5
 google-api-python-client==2.100.0
 google-auth-httplib2==0.1.1
 google-auth-oauthlib==1.1.0
@@ -12,4 +12,3 @@ requests==2.31.0
 langchain>=0.1.0
 langchain-openai>=0.1.0
 langchainhub>=0.1.14
-

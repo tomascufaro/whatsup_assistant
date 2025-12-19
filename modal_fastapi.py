@@ -27,10 +27,8 @@ image = (
         "pandas>=2.1.3",
         "pydantic>=2.5.0",
     )
-    .add_local_dir(
-        Path(__file__).parent / "src",
-        remote_path="/root/src"
-    )
+    # Mount the local source tree into /root/src inside the container.
+    .add_local_dir(Path(__file__).parent / "src", remote_path="/root/src")
 )
 
 @app.function(
@@ -43,6 +41,8 @@ image = (
 def fastapi_app():
     """Deploy FastAPI app on Modal."""
     import sys
+    import os
+    import httpx
 
     print("Starting FastAPI app deployment...")
     print(f"Python path: {sys.path}")
@@ -50,6 +50,16 @@ def fastapi_app():
     # Add src directory to Python path
     sys.path.insert(0, "/root/src")
     print(f"Updated Python path: {sys.path}")
+
+    # Preflight check: verify LLM endpoint is reachable from inside the container
+    llm_url = os.getenv("MODAL_ENDPOINT_URL", "")
+    print(f"LLM URL from env: {llm_url}")
+    if llm_url:
+        try:
+            resp = httpx.get(llm_url, timeout=5)
+            print(f"Preflight LLM GET status: {resp.status_code}")
+        except Exception as e:
+            print(f"Preflight LLM GET failed: {e}")
 
     try:
         from main import app as fastapi_app
